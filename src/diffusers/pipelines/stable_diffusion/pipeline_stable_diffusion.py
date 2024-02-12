@@ -170,6 +170,7 @@ class StableDiffusionPipeline(
     ):
         super().__init__()
 
+        print("\n\npersonalized stable diffusion pipeline from diffusers\n\n")
         if hasattr(scheduler.config, "steps_offset") and scheduler.config.steps_offset != 1:
             deprecation_message = (
                 f"The configuration file of this scheduler: {scheduler} is outdated. `steps_offset`"
