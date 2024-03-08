@@ -166,7 +166,7 @@ class StableDiffusionPipeline(
         safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPImageProcessor,
         image_encoder: CLIPVisionModelWithProjection = None,
-        requires_safety_checker: bool = True,
+        requires_safety_checker: bool = True
     ):
         super().__init__()
 
@@ -1006,6 +1006,11 @@ class StableDiffusionPipeline(
 
         # 5. Prepare latent variables
         num_channels_latents = self.unet.config.in_channels
+
+        add_pos_embeddings = kwargs.pop("add_pos_embeddings")
+        if add_pos_embeddings:
+            num_channels_latents -= 2
+
         latents = self.prepare_latents(
             batch_size * num_images_per_prompt,
             num_channels_latents,
@@ -1016,6 +1021,17 @@ class StableDiffusionPipeline(
             generator,
             latents,
         )
+
+        # 5.1 Add position embeddings the last 2 dims with position embeddings
+        if add_pos_embeddings:
+            x_start, y_start = 0, 0
+            x_pos = torch.arange(x_start, x_start+width).view(1, -1).repeat(width, 1)
+            y_pos = torch.arange(y_start, y_start+height).view(-1, 1).repeat(1, height)
+            x_pos = (x_pos / (width - 1) - 0.5) * 2.
+            y_pos = (y_pos / (height - 1) - 0.5) * 2.
+            latents_pos = torch.stack([x_pos, y_pos], dim=0)
+            latents_pos = latents_pos.unsqueeze(0).repeat(batch_size * num_images_per_prompt, 1, 1, 1)
+            latents = torch.cat([latents, latents_pos], dim=1)
 
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)

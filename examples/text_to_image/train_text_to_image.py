@@ -47,7 +47,7 @@ from diffusers.training_utils import EMAModel, compute_snr
 from diffusers.utils import check_min_version, deprecate, is_wandb_available, make_image_grid
 from diffusers.utils.hub_utils import load_or_create_model_card, populate_model_card
 from diffusers.utils.import_utils import is_xformers_available
-from diffusers.utils.torch_utils import is_compiled_module
+from diffusers.utils.torch_utils import is_compiled_module, randn_tensor
 
 
 if is_wandb_available():
@@ -138,6 +138,7 @@ More information on all the CLI arguments and the environment are available on y
 
 def log_validation(vae, text_encoder, tokenizer, unet, args, accelerator, weight_dtype, epoch):
     logger.info("Running validation... ")
+    # //review: 训练时使用的in_channels = 6，模型保存、pipeline加载的时候应该也是6
 
     pipeline = StableDiffusionPipeline.from_pretrained(
         args.pretrained_model_name_or_path,
@@ -493,6 +494,44 @@ def parse_args():
     return args
 
 
+def patchify(images, patch_size, padding=None):
+    device = images.device
+    batch_size, resolution = images.size(0), images.size(2)
+
+    if padding is not None:
+        padded = torch.zeros((images.size(0), images.size(1), images.size(2) + padding * 2,
+                                images.size(3) + padding * 2), dtype=images.dtype, device=device)
+        padded[:, :, padding:-padding, padding:-padding] = images
+    else:
+        padded = images
+
+    h, w = padded.size(2), padded.size(3)
+    th, tw = patch_size, patch_size
+    if w == tw and h == th:
+        i = torch.zeros((batch_size,), device=device).long()
+        j = torch.zeros((batch_size,), device=device).long()
+    else:
+        i = torch.randint(0, h - th + 1, (batch_size,), device=device)
+        j = torch.randint(0, w - tw + 1, (batch_size,), device=device)
+
+    rows = torch.arange(th, dtype=torch.long, device=device) + i[:, None]
+    columns = torch.arange(tw, dtype=torch.long, device=device) + j[:, None]
+    padded = padded.permute(1, 0, 2, 3)
+    padded = padded[:, torch.arange(batch_size)[:, None, None], rows[:, torch.arange(th)[:, None]],
+                columns[:, None]]
+    padded = padded.permute(1, 0, 2, 3)
+
+    x_pos = torch.arange(tw, dtype=torch.long, device=device).unsqueeze(0).repeat(th, 1).unsqueeze(0).unsqueeze(0).repeat(batch_size, 1, 1, 1)
+    y_pos = torch.arange(th, dtype=torch.long, device=device).unsqueeze(1).repeat(1, tw).unsqueeze(0).unsqueeze(0).repeat(batch_size, 1, 1, 1)
+    x_pos = x_pos + j.view(-1, 1, 1, 1)
+    y_pos = y_pos + i.view(-1, 1, 1, 1)
+    x_pos = (x_pos / (resolution - 1) - 0.5) * 2.
+    y_pos = (y_pos / (resolution - 1) - 0.5) * 2.
+    images_pos = torch.cat((x_pos, y_pos), dim=1)
+
+    return padded, images_pos
+
+
 def main():
     args = parse_args()
 
@@ -585,8 +624,15 @@ def main():
             args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
         )
 
+    # //note: in_channels => 6，增加x、y coordinates
+    # adding additional channels to a pretrained diffusion model: https://github.com/huggingface/diffusers/issues/1619
     unet = UNet2DConditionModel.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision
+        args.pretrained_model_name_or_path, 
+        subfolder="unet", 
+        revision=args.non_ema_revision,
+        in_channels=6,
+        low_cpu_mem_usage=False,
+        ignore_mismatched_sizes=True
     )
 
     # Freeze vae and text_encoder and set unet to trainable
@@ -844,7 +890,7 @@ def main():
         model = model._orig_mod if is_compiled_module(model) else model
         return model
 
-    # Train!
+    # Train! //note: batch_size_per_device * num_devices * accumulation_steps
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
     logger.info("***** Running training *****")
@@ -893,13 +939,48 @@ def main():
         disable=not accelerator.is_local_main_process,
     )
 
+    # Patch Diffusion 
+    #//todo: 这些参数要调整到上面去
+    real_p = 0.5
+    progressive = True
+    img_resolution = args.resolution // 8  #//todo: 需要检查Diffusers是不是已经把/8考虑到了SD当中
+    batch_mul_dict = {512: 1, 256: 2, 128: 4, 64: 16, 32: 32, 16: 64}
+
+    p_list = np.array([(1 - real_p), real_p])
+    patch_list = np.array([img_resolution // 2, img_resolution])
+    # batch_mul_avg = np.sum(p_list * np.array([2, 1])) #//note: 不再计算avg，直接根据batch_mul计算精确数值
+    num_total_batch = len(train_dataloader) #//review: 这里要考虑不同的进程吗？
+
     for epoch in range(first_epoch, args.num_train_epochs):
         train_loss = 0.0
-        for step, batch in enumerate(train_dataloader):
+        num_acc_batch = 0
+
+        if progressive:
+            p_cumsum = p_list.cumsum()
+            p_cumsum[-1] = 10.
+            prog_mask = (num_acc_batch // num_total_batch) <= p_cumsum # //review: 数量计算是否正确？
+            patch_size = int(patch_list[prog_mask][0])
+            # batch_mul_avg = batch_mul_dict[patch_size] // batch_mul_dict[img_resolution]
+        else:
+            patch_size = int(np.random.choice(patch_list, p=p_list))
+
+        batch_mul = batch_mul_dict[patch_size] // batch_mul_dict[img_resolution]
+        num_acc_batch += batch_mul
+
+        batch = []
+        # for step, batch in enumerate(train_dataloader):
+        while num_acc_batch <= num_total_batch: # //review: 这个条件是否正确？
+            for _ in range(batch_mul):
+                batch.append(next(train_dataloader))
+                num_acc_batch += 1
+
             with accelerator.accumulate(unet):
                 # Convert images to latent space
                 latents = vae.encode(batch["pixel_values"].to(weight_dtype)).latent_dist.sample()
                 latents = latents * vae.config.scaling_factor
+
+                # patchify latent images before adding noise //review: 虽然源码也是这样的但是真的合理吗！
+                latents, latents_pos = patchify(latents, patch_size)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
@@ -938,7 +1019,9 @@ def main():
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
                 # Predict the noise residual and compute loss
-                model_pred = unet(noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]
+                # //note: 这里的noisy_latents加入了position embedding
+                noisy_latents_with_pos = torch.cat([noisy_latents, latents_pos], dim=1) if latents_pos is not None else noisy_latents
+                model_pred = unet(noisy_latents_with_pos, timesteps, encoder_hidden_states, return_dict=False)[0]
 
                 if args.snr_gamma is None:
                     loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
@@ -1067,7 +1150,10 @@ def main():
 
             for i in range(len(args.validation_prompts)):
                 with torch.autocast("cuda"):
-                    image = pipeline(args.validation_prompts[i], num_inference_steps=20, generator=generator).images[0]
+                    image = pipeline(
+                        args.validation_prompts[i], num_inference_steps=20, generator=generator, 
+                        **dict(add_pos_embeddings=True) # //note: 其他调用pipeline的地方也需要考虑
+                    ).images[0]
                 images.append(image)
 
         if args.push_to_hub:
