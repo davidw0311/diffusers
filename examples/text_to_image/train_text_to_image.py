@@ -967,12 +967,23 @@ def main():
         batch_mul = batch_mul_dict[patch_size] // batch_mul_dict[img_resolution]
         num_acc_batch += batch_mul
 
-        batch = []
+        iter_train_dataloader = iter(train_dataloader)
+
         # for step, batch in enumerate(train_dataloader):
         while num_acc_batch <= num_total_batch: # //review: 这个条件是否正确？
+            input_ids_batch_list = []
+            pixel_values_batch_list = []
+            
             for _ in range(batch_mul):
-                batch.append(next(train_dataloader))
+                batch_dict = next(iter_train_dataloader)
+                pixel_values_batch_list.append(batch_dict["pixel_values"])
+                input_ids_batch_list.append(batch_dict["input_ids"])
                 num_acc_batch += 1
+            
+            batch = {
+                "pixel_values": torch.cat(pixel_values_batch_list),
+                "input_ids": torch.cat(input_ids_batch_list)
+            }
 
             with accelerator.accumulate(unet):
                 # Convert images to latent space
