@@ -1007,7 +1007,7 @@ class StableDiffusionPipeline(
         # 5. Prepare latent variables
         num_channels_latents = self.unet.config.in_channels
 
-        add_pos_embeddings = kwargs.pop("add_pos_embeddings")
+        add_pos_embeddings = kwargs.get("add_pos_embeddings")
         if add_pos_embeddings:
             num_channels_latents -= 2
 
