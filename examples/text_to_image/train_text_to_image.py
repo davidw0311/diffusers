@@ -982,26 +982,6 @@ def main():
         num_acc_batch += batch_mul
 
         iter_train_dataloader = iter(train_dataloader)
-        
-        if accelerator.is_main_process:
-            if args.validation_prompts is not None and epoch % args.validation_epochs == 0:
-                if args.use_ema:
-                    # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
-                    ema_unet.store(unet.parameters())
-                    ema_unet.copy_to(unet.parameters())
-                log_validation(
-                    vae,
-                    text_encoder,
-                    tokenizer,
-                    unet,
-                    args,
-                    accelerator,
-                    weight_dtype,
-                    global_step,
-                )
-                if args.use_ema:
-                    # Switch back to the original UNet parameters.
-                    ema_unet.restore(unet.parameters())
 
         # for step, batch in enumerate(train_dataloader):
         while num_acc_batch <= num_total_batch: # //review: 这个条件是否正确？
