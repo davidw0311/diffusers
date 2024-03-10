@@ -937,6 +937,10 @@ class StableDiffusionPipeline(
                 "1.0.0",
                 "Passing `callback_steps` as an input argument to `__call__` is deprecated, consider using `callback_on_step_end`",
             )
+        
+        print("="*50)
+        print(f"calling pipeline: input width & height: {width}, {height}")
+        print(f"UNet config: {self.unet.config.sample_size}, {self.vae_scale_factor}")
 
         # 0. Default height and width to unet
         height = height or self.unet.config.sample_size * self.vae_scale_factor
@@ -1022,17 +1026,6 @@ class StableDiffusionPipeline(
             latents,
         )
 
-        # 5.1 Add position embeddings the last 2 dims with position embeddings
-        if add_pos_embeddings:
-            x_start, y_start = 0, 0
-            x_pos = torch.arange(x_start, x_start+width).view(1, -1).repeat(width, 1)
-            y_pos = torch.arange(y_start, y_start+height).view(-1, 1).repeat(1, height)
-            x_pos = (x_pos / (width - 1) - 0.5) * 2.
-            y_pos = (y_pos / (height - 1) - 0.5) * 2.
-            latents_pos = torch.stack([x_pos, y_pos], dim=0)
-            latents_pos = latents_pos.unsqueeze(0).repeat(batch_size * num_images_per_prompt, 1, 1, 1)
-            latents = torch.cat([latents, latents_pos], dim=1)
-
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
@@ -1050,6 +1043,8 @@ class StableDiffusionPipeline(
             timestep_cond = self.get_guidance_scale_embedding(
                 guidance_scale_tensor, embedding_dim=self.unet.config.time_cond_proj_dim
             ).to(device=device, dtype=latents.dtype)
+            
+        print("---------------------- Pipeline, Start Denoising Loop... ----------------------")
 
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -1062,6 +1057,25 @@ class StableDiffusionPipeline(
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                
+                # Add position embeddings
+                if add_pos_embeddings:
+                    x_start, y_start = 0, 0
+                    latent_height = height // self.vae_scale_factor
+                    latent_width = width // self.vae_scale_factor
+                    x_pos = torch.arange(x_start, x_start+latent_width).view(1, -1).repeat(latent_width, 1)
+                    y_pos = torch.arange(y_start, y_start+latent_height).view(-1, 1).repeat(1, latent_height)
+                    x_pos = (x_pos / (latent_width - 1) - 0.5) * 2.
+                    y_pos = (y_pos / (latent_height - 1) - 0.5) * 2.
+                    latents_pos = torch.stack([x_pos, y_pos], dim=0)
+                    latents_pos = latents_pos.unsqueeze(0).repeat(batch_size * num_images_per_prompt, 1, 1, 1)
+                    latents_pos = latents_pos.to(device)
+
+                    if self.do_classifier_free_guidance:
+                        latent_model_input = torch.cat([latent_model_input, torch.cat([latents_pos, latents_pos], dim=0)], dim=1)
+                    else:
+                        latent_model_input = torch.cat([latent_model_input, latents_pos], dim=1)
+                        
 
                 # predict the noise residual
                 noise_pred = self.unet(

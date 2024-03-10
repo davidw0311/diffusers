@@ -165,7 +165,12 @@ def log_validation(vae, text_encoder, tokenizer, unet, args, accelerator, weight
     images = []
     for i in range(len(args.validation_prompts)):
         with torch.autocast("cuda"):
-            image = pipeline(args.validation_prompts[i], num_inference_steps=20, generator=generator).images[0]
+            image = pipeline(
+                args.validation_prompts[i], 
+                num_inference_steps=20, 
+                generator=generator,
+                **dict(add_pos_embeddings=True)
+                ).images[0]
 
         images.append(image)
 
@@ -643,7 +648,13 @@ def main():
     # Create EMA for the unet.
     if args.use_ema:
         ema_unet = UNet2DConditionModel.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision, variant=args.variant
+            args.pretrained_model_name_or_path, 
+            subfolder="unet", 
+            revision=args.revision, 
+            variant=args.variant,
+            in_channels=6,
+            low_cpu_mem_usage=False,
+            ignore_mismatched_sizes=True
         )
         ema_unet = EMAModel(ema_unet.parameters(), model_cls=UNet2DConditionModel, model_config=ema_unet.config)
 
@@ -686,7 +697,11 @@ def main():
                 model = models.pop()
 
                 # load diffusers style into model
-                load_model = UNet2DConditionModel.from_pretrained(input_dir, subfolder="unet")
+                load_model = UNet2DConditionModel.from_pretrained(input_dir, 
+                                                                  subfolder="unet", 
+                                                                  in_channels=6, 
+                                                                  low_cpu_mem_usage=False, 
+                                                                  ignore_mismatched_sizes=True)
                 model.register_to_config(**load_model.config)
 
                 model.load_state_dict(load_model.state_dict())
@@ -943,11 +958,11 @@ def main():
     #//todo: 这些参数要调整到上面去
     real_p = 0.5
     progressive = True
-    img_resolution = args.resolution // 8  #//todo: 需要检查Diffusers是不是已经把/8考虑到了SD当中
+    latent_resolution = args.resolution  // 8
     batch_mul_dict = {512: 1, 256: 2, 128: 4, 64: 16, 32: 32, 16: 64}
 
     p_list = np.array([(1 - real_p), real_p])
-    patch_list = np.array([img_resolution // 2, img_resolution])
+    patch_list = np.array([latent_resolution // 2, latent_resolution])
     # batch_mul_avg = np.sum(p_list * np.array([2, 1])) #//note: 不再计算avg，直接根据batch_mul计算精确数值
     num_total_batch = len(train_dataloader) #//review: 这里要考虑不同的进程吗？
 
@@ -960,14 +975,33 @@ def main():
             p_cumsum[-1] = 10.
             prog_mask = (num_acc_batch // num_total_batch) <= p_cumsum # //review: 数量计算是否正确？
             patch_size = int(patch_list[prog_mask][0])
-            # batch_mul_avg = batch_mul_dict[patch_size] // batch_mul_dict[img_resolution]
         else:
             patch_size = int(np.random.choice(patch_list, p=p_list))
 
-        batch_mul = batch_mul_dict[patch_size] // batch_mul_dict[img_resolution]
+        batch_mul = batch_mul_dict[patch_size] // batch_mul_dict[latent_resolution]
         num_acc_batch += batch_mul
 
         iter_train_dataloader = iter(train_dataloader)
+        
+        if accelerator.is_main_process:
+            if args.validation_prompts is not None and epoch % args.validation_epochs == 0:
+                if args.use_ema:
+                    # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
+                    ema_unet.store(unet.parameters())
+                    ema_unet.copy_to(unet.parameters())
+                log_validation(
+                    vae,
+                    text_encoder,
+                    tokenizer,
+                    unet,
+                    args,
+                    accelerator,
+                    weight_dtype,
+                    global_step,
+                )
+                if args.use_ema:
+                    # Switch back to the original UNet parameters.
+                    ema_unet.restore(unet.parameters())
 
         # for step, batch in enumerate(train_dataloader):
         while num_acc_batch <= num_total_batch: # //review: 这个条件是否正确？
@@ -1162,10 +1196,15 @@ def main():
             for i in range(len(args.validation_prompts)):
                 with torch.autocast("cuda"):
                     image = pipeline(
-                        args.validation_prompts[i], num_inference_steps=20, generator=generator, 
+                        args.validation_prompts[i], 
+                        num_inference_steps=20,
+                        generator=generator, 
                         **dict(add_pos_embeddings=True) # //note: 其他调用pipeline的地方也需要考虑
                     ).images[0]
                 images.append(image)
+            
+            wandb.log({"generated_images": [wandb.Image(image) for image in images]})
+
 
         if args.push_to_hub:
             save_model_card(args, repo_id, images, repo_folder=args.output_dir)
