@@ -659,7 +659,8 @@ def main():
             variant=args.variant,
             in_channels=6,
             low_cpu_mem_usage=False,
-            ignore_mismatched_sizes=True
+            ignore_mismatched_sizes=True,
+            from_scratch=args.from_scratch
         )
         ema_unet = EMAModel(ema_unet.parameters(), model_cls=UNet2DConditionModel, model_config=ema_unet.config)
 
@@ -706,7 +707,8 @@ def main():
                                                                   subfolder="unet", 
                                                                   in_channels=6, 
                                                                   low_cpu_mem_usage=False, 
-                                                                  ignore_mismatched_sizes=True)
+                                                                  ignore_mismatched_sizes=True,
+                                                                  from_scratch=args.from_scratch)
                 model.register_to_config(**load_model.config)
 
                 model.load_state_dict(load_model.state_dict())
