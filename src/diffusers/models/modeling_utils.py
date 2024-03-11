@@ -170,17 +170,29 @@ def load_model_dict_into_meta(
     return unexpected_keys
 
 
-def _load_state_dict_into_model(model_to_load, state_dict: OrderedDict) -> List[str]:
+def _load_state_dict_into_model(model_to_load, state_dict: OrderedDict, from_scratch=False) -> List[str]:
+    # REVIEW: init function
     # Convert old format to new format if needed from a PyTorch state_dict
     # copy state_dict so _load_from_state_dict can modify it
     state_dict = state_dict.copy()
     error_msgs = []
 
+    def init_parameters(module: nn.Module):
+        for name, param in module.named_parameters():
+            if len(param.shape) < 2:
+                nn.init.normal_(param)
+            else:
+                nn.init.xavier_uniform_(param)
+
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
     def load(module: torch.nn.Module, prefix: str = ""):
-        args = (state_dict, prefix, {}, True, [], [], error_msgs)
-        module._load_from_state_dict(*args)
+        if from_scratch:
+            # init parameters
+            init_parameters(module)
+        else:
+            args = (state_dict, prefix, {}, True, [], [], error_msgs)
+            module._load_from_state_dict(*args)
 
         for name, child in module._modules.items():
             if child is not None:
@@ -755,6 +767,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
                     model_file,
                     pretrained_model_name_or_path,
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    from_scratch=from_scratch
                 )
 
                 loading_info = {
@@ -788,6 +801,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
         resolved_archive_file,
         pretrained_model_name_or_path: Union[str, os.PathLike],
         ignore_mismatched_sizes: bool = False,
+        from_scratch: bool = False,
     ):
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
@@ -832,7 +846,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
                 original_loaded_keys,
                 ignore_mismatched_sizes,
             )
-            error_msgs = _load_state_dict_into_model(model_to_load, state_dict)
+            error_msgs = _load_state_dict_into_model(model_to_load, state_dict, from_scratch=from_scratch)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
