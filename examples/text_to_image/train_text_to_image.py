@@ -208,6 +208,7 @@ def parse_args():
         required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
+    parser.add_argument("--from_scratch", action="store_true", help="Whether to train from scratch")
     parser.add_argument(
         "--revision",
         type=str,
@@ -637,8 +638,12 @@ def main():
         revision=args.non_ema_revision,
         in_channels=6,
         low_cpu_mem_usage=False,
-        ignore_mismatched_sizes=True
+        ignore_mismatched_sizes=True,
+        from_scratch=args.from_scratch
     )
+
+    if args.from_scratch:
+        print("\n\nTraining Unet from scratch\n\n")
 
     # Freeze vae and text_encoder and set unet to trainable
     vae.requires_grad_(False)

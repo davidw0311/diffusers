@@ -136,7 +136,6 @@ def load_model_dict_into_meta(
     device: Optional[Union[str, torch.device]] = None,
     dtype: Optional[Union[str, torch.dtype]] = None,
     model_name_or_path: Optional[str] = None,
-    from_scratch=False
 ) -> List[str]:
     device = device or torch.device("cpu")
     dtype = dtype or torch.float32
@@ -156,14 +155,13 @@ def load_model_dict_into_meta(
                 f"Cannot load {model_name_or_path_str}because {param_name} expected shape {empty_state_dict[param_name]}, but got {param.shape}. If you want to instead overwrite randomly initialized weights, please make sure to pass both `low_cpu_mem_usage=False` and `ignore_mismatched_sizes=True`. For more information, see also: https://github.com/huggingface/diffusers/issues/1619#issuecomment-1345604389 as an example."
             )
 
-        if from_scratch:
+        if accepts_dtype:
+            print("changing to xavier init")
             if type(model) == diffusers.models.unets.unet_2d_condition.UNet2DConditionModel:
                 if len(param.shape) < 2:
                     torch.nn.init.normal_(param)
                 else:
                     torch.nn.init.xavier_uniform_(param)
-                    
-        if accepts_dtype:
             set_module_tensor_to_device(model, param_name, device, value=param, dtype=dtype)
         else:
             set_module_tensor_to_device(model, param_name, device, value=param)
@@ -191,7 +189,7 @@ def _load_state_dict_into_model(model_to_load, state_dict: OrderedDict) -> List[
     return error_msgs
 
 
-class ModelMixin(torch.nn.Module, PushToHubMixin):
+class ModelMixin_mdCustom(torch.nn.Module, PushToHubMixin):
     r"""
     Base class for all models.
 
@@ -400,7 +398,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
 
     @classmethod
     @validate_hf_hub_args
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], from_scratch=False, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], **kwargs):
         r"""
         Instantiate a pretrained PyTorch model from a pretrained model configuration.
 
@@ -680,7 +678,6 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
                         device=param_device,
                         dtype=torch_dtype,
                         model_name_or_path=pretrained_model_name_or_path,
-                        from_scratch=from_scratch
                     )
 
                     if cls._keys_to_ignore_on_load_unexpected is not None:

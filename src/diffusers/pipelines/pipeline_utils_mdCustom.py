@@ -91,6 +91,7 @@ logger = logging.get_logger(__name__)
 LOADABLE_CLASSES = {
     "diffusers": {
         "ModelMixin": ["save_pretrained", "from_pretrained"],
+        "ModelMixin_mdCustom": ["save_pretrained", "from_pretrained"],
         "SchedulerMixin": ["save_pretrained", "from_pretrained"],
         "DiffusionPipeline": ["save_pretrained", "from_pretrained"],
         "OnnxRuntimeModel": ["save_pretrained", "from_pretrained"],
@@ -437,7 +438,6 @@ def load_sub_model(
     low_cpu_mem_usage: bool,
     cached_folder: Union[str, os.PathLike],
     revision: str = None,
-    from_scratch=False
 ):
     """Helper method to load the module `name` from `library_name` and `class_name`"""
     # retrieve class candidates
@@ -529,17 +529,10 @@ def load_sub_model(
 
     # check if the module is in a subdirectory
     if os.path.isdir(os.path.join(cached_folder, name)):
-        
-        if name == "unet":
-            loaded_sub_model = load_method(os.path.join(cached_folder, name), from_scratch=from_scratch, **loading_kwargs)
-        else:
-            loaded_sub_model = load_method(os.path.join(cached_folder, name), **loading_kwargs)
+        loaded_sub_model = load_method(os.path.join(cached_folder, name), **loading_kwargs)
     else:
         # else load from the root directory
-        if name == "unet":
-            loaded_sub_model = load_method(cached_folder, from_scratch=from_scratch, **loading_kwargs)
-        else:
-            loaded_sub_model = load_method(cached_folder, **loading_kwargs)
+        loaded_sub_model = load_method(cached_folder, **loading_kwargs)
 
     return loaded_sub_model
 
@@ -1116,7 +1109,10 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
             cached_folder = pretrained_model_name_or_path
 
         config_dict = cls.load_config(cached_folder)
-
+        
+        if config_dict['unet'][1] == 'UNet2DConditionModel':
+            config_dict['unet'] = ['diffusers', 'UNet2DConditionModel_mdCustom']
+            
         # pop out "_ignore_files" as it is only needed for download
         config_dict.pop("_ignore_files", None)
 
@@ -1251,7 +1247,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
         # 6. Load each module in the pipeline
         for name, (library_name, class_name) in logging.tqdm(init_dict.items(), desc="Loading pipeline components..."):
             # 6.1 - now that JAX/Flax is an official framework of the library, we might load from Flax names
-            print(f"\n\nloading the {class_name}\n\n")
+            print(f"\n\nloading the custom {class_name}\n\n")
             class_name = class_name[4:] if class_name.startswith("Flax") else class_name
 
             # 6.2 Define all importable classes
@@ -1291,7 +1287,6 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
                     low_cpu_mem_usage=low_cpu_mem_usage,
                     cached_folder=cached_folder,
                     revision=revision,
-                    from_scratch=from_scratch,
                 )
                 logger.info(
                     f"Loaded {name} as {class_name} from `{name}` subfolder of {pretrained_model_name_or_path}."

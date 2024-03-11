@@ -35,6 +35,7 @@ if is_torch_available():
     _import_structure["dual_transformer_2d"] = ["DualTransformer2DModel"]
     _import_structure["embeddings"] = ["ImageProjection"]
     _import_structure["modeling_utils"] = ["ModelMixin"]
+    _import_structure["modeling_utils_mdCustom"] = ["ModelMixin_mdCustom"]
     _import_structure["transformers.prior_transformer"] = ["PriorTransformer"]
     _import_structure["transformers.t5_film_transformer"] = ["T5FilmDecoder"]
     _import_structure["transformers.transformer_2d"] = ["Transformer2DModel"]
@@ -42,6 +43,7 @@ if is_torch_available():
     _import_structure["unets.unet_1d"] = ["UNet1DModel"]
     _import_structure["unets.unet_2d"] = ["UNet2DModel"]
     _import_structure["unets.unet_2d_condition"] = ["UNet2DConditionModel"]
+    _import_structure["unets.unet_2d_condition_mdCustom"] = ["UNet2DConditionModel_mdCustom"]
     _import_structure["unets.unet_3d_condition"] = ["UNet3DConditionModel"]
     _import_structure["unets.unet_i2vgen_xl"] = ["I2VGenXLUNet"]
     _import_structure["unets.unet_kandinsky3"] = ["Kandinsky3UNet"]
@@ -69,6 +71,7 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
         from .controlnet import ControlNetModel
         from .embeddings import ImageProjection
         from .modeling_utils import ModelMixin
+        from .modeling_utils_mdCustom import ModelMixin_mdCustom
         from .transformers import (
             DualTransformer2DModel,
             PriorTransformer,
@@ -82,6 +85,7 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             MotionAdapter,
             UNet1DModel,
             UNet2DConditionModel,
+            UNet2DConditionModel_mdCustom,
             UNet2DModel,
             UNet3DConditionModel,
             UNetMotionModel,
