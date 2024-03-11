@@ -186,8 +186,8 @@ def _load_state_dict_into_model(model_to_load, state_dict: OrderedDict, from_scr
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: torch.nn.Module, prefix: str = ""):
-        if from_scratch:
+    def load(module: torch.nn.Module, prefix: str = "", load_from_scratch=False):
+        if load_from_scratch:
             # init parameters
             init_parameters(module)
         else:
@@ -196,9 +196,9 @@ def _load_state_dict_into_model(model_to_load, state_dict: OrderedDict, from_scr
 
         for name, child in module._modules.items():
             if child is not None:
-                load(child, prefix + name + ".")
+                load(child, prefix + name + ".", load_from_scratch=load_from_scratch)
 
-    load(model_to_load)
+    load(model_to_load, load_from_scratch=from_scratch)
 
     return error_msgs
 
