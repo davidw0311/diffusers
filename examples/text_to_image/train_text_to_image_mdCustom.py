@@ -593,10 +593,25 @@ def main():
     if args.from_scratch:
         print("\n\nTraining Unet from scratch\n\n")
         original_unet_config = UNet2DConditionModel.load_config(args.pretrained_model_name_or_path, subfolder="unet")
-        print(original_unet_config)
-        unet = UNet2DConditionModel.from_config(original_unet_config)
+        # print(original_unet_config)
+        # {'_class_name': 'UNet2DConditionModel', '_diffusers_version': '0.6.0', 'act_fn': 'silu', 'attention_head_dim': 8, 'block_out_channels': [320, 640, 1280, 1280], 'center_input_sample': False, 'cross_attention_dim': 768, 'down_block_types': ['CrossAttnDownBlock2D', 'CrossAttnDownBlock2D', 'CrossAttnDownBlock2D', 'DownBlock2D'], 'downsample_padding': 1, 'flip_sin_to_cos': True, 'freq_shift': 0, 'in_channels': 4, 'layers_per_block': 2, 'mid_block_scale_factor': 1, 'norm_eps': 1e-05, 'norm_num_groups': 32, 'out_channels': 4, 'sample_size': 64, 'up_block_types': ['UpBlock2D', 'CrossAttnUpBlock2D', 'CrossAttnUpBlock2D', 'CrossAttnUpBlock2D']}
+        # attempt 1 not working
+        # new_unet_config = {'_class_name': 'UNet2DConditionModel', '_diffusers_version': '0.6.0', 'act_fn': 'silu', 'attention_head_dim': 8, 'block_out_channels': [320, 640, 1280, 1280], 'center_input_sample': False, 'cross_attention_dim': 768, 'down_block_types': ['CrossAttnDownBlock2D_mdCustom_top', 'CrossAttnDownBlock2D_mdCustom_mid', 'CrossAttnDownBlock2D_mdCustom_btm', 'DownBlock2D'], 'downsample_padding': 1, 'flip_sin_to_cos': True, 'freq_shift': 0, 'in_channels': 4, 'layers_per_block': 2, 'mid_block_scale_factor': 1, 'norm_eps': 1e-05, 'norm_num_groups': 32, 'out_channels': 4, 'sample_size': 64, 'up_block_types': ['UpBlock2D', 'CrossAttnUpBlock2D_mdCustom_btm', 'CrossAttnUpBlock2D_mdCustom_mid', 'CrossAttnUpBlock2D_mdCustom_top']}
+        
+        #attempt 2
+        new_unet_config = {'_class_name': 'UNet2DConditionModel', '_diffusers_version': '0.6.0', 'act_fn': 'gelu', 'attention_head_dim': 8, 'block_out_channels': [320, 128, 64, 32], 'center_input_sample': False, 'cross_attention_dim': 768, 'down_block_types': ['CrossAttnDownBlock2D', 'CrossAttnDownBlock2D', 'CrossAttnDownBlock2D', 'DownBlock2D'], 'downsample_padding': 1, 'flip_sin_to_cos': True, 'freq_shift': 0, 'in_channels': 4, #'layers_per_block': 2,
+                           'mid_block_scale_factor': 1, 'norm_eps': 1e-05, 'norm_num_groups': 32, 'out_channels': 4, 'sample_size': 64, 'up_block_types': ['UpBlock2D', 'CrossAttnUpBlock2D', 'CrossAttnUpBlock2D', 'CrossAttnUpBlock2D'], 
+                           'transformer_layers_per_block': [0, 1, 2, 3],  # make transformer layers increase as resolution is smaller
+                           'only_cross_attention': [True, True, False, False],
+                           'layers_per_block': [1, 1, 1, 2],                           
+                           }
+
+        unet = UNet2DConditionModel.from_config(new_unet_config)
+        unet.fuse_qkv_projections()
+        # unet = UNet2DConditionModel.from_config(original_unet_config)
         print(unet)
         print("Number of parameters: ", sum(p.numel() for p in unet.parameters() if p.requires_grad))
+
     else:  
         unet = UNet2DConditionModel.from_pretrained(
             args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision, from_scratch=args.from_scratch
