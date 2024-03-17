@@ -44,9 +44,6 @@ from ..embeddings import (
 )
 from ..modeling_utils import ModelMixin
 from .unet_2d_blocks_mdCustom import (
-    UNetMidBlock2D_mdCustom,
-    UNetMidBlock2DCrossAttn_mdCustom,
-    UNetMidBlock2DSimpleCrossAttn_mdCustom,
     get_down_block,
     get_up_block,
 )
@@ -174,13 +171,15 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
         flip_sin_to_cos: bool = True,
         freq_shift: int = 0,
         down_block_types: Tuple[str] = (
-            "CrossAttnDownBlock2D",
-            "CrossAttnDownBlock2D",
-            "CrossAttnDownBlock2D",
-            "DownBlock2D",
+            "DownBlock2D_64x64_mdCustom",
+            "DownBlock2D_32x32_mdCustom",
+            "DownBlock2D_16x16_mdCustom",
         ),
         mid_block_type: Optional[str] = "UNetMidBlock2DCrossAttn_mdCustom",
-        up_block_types: Tuple[str] = ("UpBlock2D", "CrossAttnUpBlock2D", "CrossAttnUpBlock2D", "CrossAttnUpBlock2D"),
+        up_block_types: Tuple[str] = ("UpBlock2D_16x16_mdCustom", 
+                                      "UpBlock2D_32x32_mdCustom", 
+                                      "UpBlock2D_64x64_mdCustom", 
+        ),
         only_cross_attention: Union[bool, Tuple[bool]] = False,
         block_out_channels: Tuple[int] = (320, 640, 1280, 1280),
         layers_per_block: Union[int, Tuple[int]] = 2,
@@ -237,7 +236,10 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
         # print("layers_per_block", layers_per_block)
         # print("downsample_padding", downsample_padding)
 
-       
+        block_out_channels = (320, 640, 1280)
+        down_block_types = ("DownBlock2D_64x64_mdCustom", "DownBlock2D_32x32_mdCustom", "DownBlock2D_16x16_mdCustom")
+        mid_block_type = None
+        up_block_types = ("UpBlock2D_16x16_mdCustom", "UpBlock2D_32x32_mdCustom", "UpBlock2D_64x64_mdCustom")
 
 
         if num_attention_heads is not None:
@@ -493,57 +495,9 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
             self.down_blocks.append(down_block)
 
         # mid
-        if mid_block_type == "UNetMidBlock2DCrossAttn_mdCustom":
-            self.mid_block = UNetMidBlock2DCrossAttn_mdCustom(
-                transformer_layers_per_block=transformer_layers_per_block[-1],
-                in_channels=block_out_channels[-1],
-                temb_channels=blocks_time_embed_dim,
-                dropout=dropout,
-                resnet_eps=norm_eps,
-                resnet_act_fn=act_fn,
-                output_scale_factor=mid_block_scale_factor,
-                resnet_time_scale_shift=resnet_time_scale_shift,
-                cross_attention_dim=cross_attention_dim[-1],
-                num_attention_heads=num_attention_heads[-1],
-                resnet_groups=norm_num_groups,
-                dual_cross_attention=dual_cross_attention,
-                use_linear_projection=use_linear_projection,
-                upcast_attention=upcast_attention,
-                attention_type=attention_type,
-            )
-        elif mid_block_type == "UNetMidBlock2DSimpleCrossAttn_mdCustom":
-            self.mid_block = UNetMidBlock2DSimpleCrossAttn_mdCustom(
-                in_channels=block_out_channels[-1],
-                temb_channels=blocks_time_embed_dim,
-                dropout=dropout,
-                resnet_eps=norm_eps,
-                resnet_act_fn=act_fn,
-                output_scale_factor=mid_block_scale_factor,
-                cross_attention_dim=cross_attention_dim[-1],
-                attention_head_dim=attention_head_dim[-1],
-                resnet_groups=norm_num_groups,
-                resnet_time_scale_shift=resnet_time_scale_shift,
-                skip_time_act=resnet_skip_time_act,
-                only_cross_attention=mid_block_only_cross_attention,
-                cross_attention_norm=cross_attention_norm,
-            )
-        elif mid_block_type == "UNetMidBlock2D_mdCustom":
-            self.mid_block = UNetMidBlock2D_mdCustom(
-                in_channels=block_out_channels[-1],
-                temb_channels=blocks_time_embed_dim,
-                dropout=dropout,
-                num_layers=0,
-                resnet_eps=norm_eps,
-                resnet_act_fn=act_fn,
-                output_scale_factor=mid_block_scale_factor,
-                resnet_groups=norm_num_groups,
-                resnet_time_scale_shift=resnet_time_scale_shift,
-                add_attention=False,
-            )
-        elif mid_block_type is None:
-            self.mid_block = None
-        else:
-            raise ValueError(f"unknown mid_block_type : {mid_block_type}")
+
+        self.mid_block = None
+
 
         # count how many layers upsample the images
         self.num_upsamplers = 0

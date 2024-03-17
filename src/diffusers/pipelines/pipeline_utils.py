@@ -437,7 +437,8 @@ def load_sub_model(
     low_cpu_mem_usage: bool,
     cached_folder: Union[str, os.PathLike],
     revision: str = None,
-    from_scratch=False
+    from_scratch=False,
+    unet_dict=None
 ):
     """Helper method to load the module `name` from `library_name` and `class_name`"""
     # retrieve class candidates
@@ -531,7 +532,7 @@ def load_sub_model(
     if os.path.isdir(os.path.join(cached_folder, name)):
         
         if name == "unet":
-            loaded_sub_model = load_method(os.path.join(cached_folder, name), from_scratch=from_scratch, **loading_kwargs)
+            loaded_sub_model = load_method(os.path.join(cached_folder, name), from_scratch=from_scratch, unet_dict=unet_dict, **loading_kwargs)
         else:
             loaded_sub_model = load_method(os.path.join(cached_folder, name), **loading_kwargs)
     else:
@@ -916,7 +917,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
 
     @classmethod
     @validate_hf_hub_args
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], from_scratch=False, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], from_scratch=False, unet_dict=None, **kwargs):
         r"""
         Instantiate a PyTorch diffusion pipeline from pretrained pipeline weights.
 
@@ -1292,6 +1293,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
                     cached_folder=cached_folder,
                     revision=revision,
                     from_scratch=from_scratch,
+                    unet_dict=unet_dict
                 )
                 logger.info(
                     f"Loaded {name} as {class_name} from `{name}` subfolder of {pretrained_model_name_or_path}."

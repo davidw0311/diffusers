@@ -400,7 +400,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
 
     @classmethod
     @validate_hf_hub_args
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], from_scratch=False, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], from_scratch=False, unet_dict=None, **kwargs):
         r"""
         Instantiate a pretrained PyTorch model from a pretrained model configuration.
 
@@ -505,8 +505,11 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
         You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
         ```
         """
+        # changing these two to allow sd to load arbitrary shaped weights
+        ignore_mismatched_sizes = True 
+        low_cpu_mem_usage = False
+        
         cache_dir = kwargs.pop("cache_dir", None)
-        ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
         force_download = kwargs.pop("force_download", False)
         from_flax = kwargs.pop("from_flax", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -521,7 +524,7 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
-        low_cpu_mem_usage = kwargs.pop("low_cpu_mem_usage", _LOW_CPU_MEM_USAGE_DEFAULT)
+        
         variant = kwargs.pop("variant", None)
         use_safetensors = kwargs.pop("use_safetensors", None)
 
@@ -594,6 +597,9 @@ class ModelMixin(torch.nn.Module, PushToHubMixin):
             **kwargs,
         )
 
+        if unet_dict is not None:
+            config = unet_dict
+            
         # load model
         model_file = None
         if from_flax:
