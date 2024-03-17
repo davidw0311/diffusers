@@ -597,13 +597,14 @@ def main():
         
         #attempt 2
         new_unet_config = {'_class_name': 'UNet2DConditionModel', '_diffusers_version': '0.6.0', 'act_fn': 'swish', 'attention_head_dim': 8, 
-                           'block_out_channels': [32, 128, 640, 1280], 'center_input_sample': False, 'cross_attention_dim': 768, 
-                           'down_block_types': ['CrossAttnDownBlock2D', 'CrossAttnDownBlock2D', 'CrossAttnDownBlock2D', 'DownBlock2D'], 'downsample_padding': 1, 'flip_sin_to_cos': True, 'freq_shift': 0, 'in_channels': 4, 
+                           'block_out_channels': [320, 640, 1280], 'center_input_sample': False, 'cross_attention_dim': 768, 
+                           'down_block_types': ['CrossAttnDownBlock2D', 'CrossAttnDownBlock2D', 'CrossAttnDownBlock2D'], 
+                           'downsample_padding': 1, 'flip_sin_to_cos': True, 'freq_shift': 0, 'in_channels': 4, 
                            'mid_block_scale_factor': 1, 'norm_eps': 1e-05, 'norm_num_groups': 32, 'out_channels': 4, 'sample_size': 64, 
-                           'up_block_types': ['UpBlock2D', 'CrossAttnUpBlock2D', 'CrossAttnUpBlock2D', 'CrossAttnUpBlock2D'], 
-                           'transformer_layers_per_block': [0, 1, 2, 3],  # make transformer layers increase as resolution is smaller
-                           'only_cross_attention': [True, True, False, False],
-                           'layers_per_block': [1, 1, 1, 2], #'layers_per_block': 2,                         
+                           'up_block_types': ['CrossAttnUpBlock2D', 'CrossAttnUpBlock2D', 'CrossAttnUpBlock2D'], 
+                           'transformer_layers_per_block': [0, 1, 2],  # make transformer layers increase as resolution is smaller
+                           'only_cross_attention': [True, False, False],
+                           'layers_per_block': [1, 1, 2], #'layers_per_block': 2,                         
                            }
 
         unet = UNet2DConditionModel.from_config(new_unet_config)
