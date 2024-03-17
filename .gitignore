@@ -177,3 +177,4 @@ tags
 # wandb
 wandb
 /examples/text_to_image/sd-pokemon-model
+/examples/text_to_image/sd-pokemon-model-from-scratch
