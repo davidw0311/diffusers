@@ -245,6 +245,7 @@ class ResnetBlock2D(nn.Module):
         down: bool = False,
         conv_shortcut_bias: bool = True,
         conv_2d_out_channels: Optional[int] = None,
+        separable_conv: Optional[bool] = True,
     ):
         super().__init__()
         if time_embedding_norm == "ada_group":
@@ -266,6 +267,7 @@ class ResnetBlock2D(nn.Module):
         self.output_scale_factor = output_scale_factor
         self.time_embedding_norm = time_embedding_norm
         self.skip_time_act = skip_time_act
+        self.separable_conv = separable_conv
 
         linear_cls = nn.Linear if USE_PEFT_BACKEND else LoRACompatibleLinear
         conv_cls = nn.Conv2d if USE_PEFT_BACKEND else LoRACompatibleConv
@@ -326,6 +328,40 @@ class ResnetBlock2D(nn.Module):
                 bias=conv_shortcut_bias,
             )
 
+        if self.separable_conv:
+            # original: self.conv1 = conv_cls(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+            self.conv1 = nn.Conv2d(
+                in_channels,
+                in_channels,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                groups=in_channels,
+            )
+            self.ptwise_conv1 = nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=1,
+                stride=1,
+                padding=1,
+            )
+            # original: self.conv2 = conv_cls(out_channels, conv_2d_out_channels, kernel_size=3, stride=1, padding=1)
+            self.conv2 = nn.Conv2d(
+                out_channels,
+                out_channels,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                groups=out_channels,
+            )
+            self.ptwise_conv2 = nn.Conv2d(
+                out_channels,
+                conv_2d_out_channels,
+                kernel_size=1,
+                stride=1,
+                padding=1,
+            )
+
     def forward(
         self,
         input_tensor: torch.FloatTensor,
@@ -363,8 +399,11 @@ class ResnetBlock2D(nn.Module):
                 if isinstance(self.downsample, Downsample2D)
                 else self.downsample(hidden_states)
             )
-
-        hidden_states = self.conv1(hidden_states, scale) if not USE_PEFT_BACKEND else self.conv1(hidden_states)
+        if self.separable_conv:
+            hidden_states = self.conv1(hidden_states)
+            hidden_states = self.ptwise_conv1(hidden_states)
+        else:
+            hidden_states = self.conv1(hidden_states, scale) if not USE_PEFT_BACKEND else self.conv1(hidden_states)
 
         if self.time_emb_proj is not None:
             if not self.skip_time_act:
@@ -393,7 +432,13 @@ class ResnetBlock2D(nn.Module):
         hidden_states = self.nonlinearity(hidden_states)
 
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.conv2(hidden_states, scale) if not USE_PEFT_BACKEND else self.conv2(hidden_states)
+
+        if self.separable_conv:
+            hidden_states = self.conv2(hidden_states)
+            hidden_states = self.ptwise_conv2(hidden_states)
+        else:
+            hidden_states = self.conv2(hidden_states, scale) if not USE_PEFT_BACKEND else self.conv2(hidden_states)
+
 
         if self.conv_shortcut is not None:
             input_tensor = (
