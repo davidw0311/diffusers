@@ -43,10 +43,10 @@ from ..embeddings import (
     Timesteps,
 )
 from ..modeling_utils import ModelMixin
-from .unet_2d_blocks import (
-    UNetMidBlock2D,
-    UNetMidBlock2DCrossAttn,
-    UNetMidBlock2DSimpleCrossAttn,
+from .unet_2d_blocks_mdCustom import (
+    UNetMidBlock2D_mdCustom,
+    UNetMidBlock2DCrossAttn_mdCustom,
+    UNetMidBlock2DSimpleCrossAttn_mdCustom,
     get_down_block,
     get_up_block,
 )
@@ -179,7 +179,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
             "CrossAttnDownBlock2D",
             "DownBlock2D",
         ),
-        mid_block_type: Optional[str] = "UNetMidBlock2DCrossAttn",
+        mid_block_type: Optional[str] = "UNetMidBlock2DCrossAttn_mdCustom",
         up_block_types: Tuple[str] = ("UpBlock2D", "CrossAttnUpBlock2D", "CrossAttnUpBlock2D", "CrossAttnUpBlock2D"),
         only_cross_attention: Union[bool, Tuple[bool]] = False,
         block_out_channels: Tuple[int] = (320, 640, 1280, 1280),
@@ -222,8 +222,23 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
         addition_embed_type_num_heads=64,
     ):
         super().__init__()
+        print("initializing a UNet2DConditionalModel with parameters:")
+        print("sample_size", sample_size)
+        print("in_channels", in_channels)
+        print("out_channels", out_channels)
+        # print("center_input_sample", center_input_sample)
+        # print("flip_sin_to_cos", flip_sin_to_cos)
+        # print("freq_shift", freq_shift)
+        print("down_block_types", down_block_types)
+        print("mid_block_type", mid_block_type)
+        print("up_block_types", up_block_types)
+        # print("only_cross_attention", only_cross_attention)
+        # print("block_out_channels", block_out_channels)
+        # print("layers_per_block", layers_per_block)
+        # print("downsample_padding", downsample_padding)
 
-        self.sample_size = sample_size
+       
+
 
         if num_attention_heads is not None:
             raise ValueError(
@@ -478,8 +493,8 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
             self.down_blocks.append(down_block)
 
         # mid
-        if mid_block_type == "UNetMidBlock2DCrossAttn":
-            self.mid_block = UNetMidBlock2DCrossAttn(
+        if mid_block_type == "UNetMidBlock2DCrossAttn_mdCustom":
+            self.mid_block = UNetMidBlock2DCrossAttn_mdCustom(
                 transformer_layers_per_block=transformer_layers_per_block[-1],
                 in_channels=block_out_channels[-1],
                 temb_channels=blocks_time_embed_dim,
@@ -496,8 +511,8 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
                 upcast_attention=upcast_attention,
                 attention_type=attention_type,
             )
-        elif mid_block_type == "UNetMidBlock2DSimpleCrossAttn":
-            self.mid_block = UNetMidBlock2DSimpleCrossAttn(
+        elif mid_block_type == "UNetMidBlock2DSimpleCrossAttn_mdCustom":
+            self.mid_block = UNetMidBlock2DSimpleCrossAttn_mdCustom(
                 in_channels=block_out_channels[-1],
                 temb_channels=blocks_time_embed_dim,
                 dropout=dropout,
@@ -512,8 +527,8 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin,
                 only_cross_attention=mid_block_only_cross_attention,
                 cross_attention_norm=cross_attention_norm,
             )
-        elif mid_block_type == "UNetMidBlock2D":
-            self.mid_block = UNetMidBlock2D(
+        elif mid_block_type == "UNetMidBlock2D_mdCustom":
+            self.mid_block = UNetMidBlock2D_mdCustom(
                 in_channels=block_out_channels[-1],
                 temb_channels=blocks_time_embed_dim,
                 dropout=dropout,
