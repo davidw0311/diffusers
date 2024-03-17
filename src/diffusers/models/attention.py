@@ -269,6 +269,7 @@ class BasicTransformerBlock(nn.Module):
             final_dropout=final_dropout,
             inner_dim=ff_inner_dim,
             bias=ff_bias,
+            mult=3
         )
 
         # 4. Fuser
