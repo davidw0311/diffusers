@@ -593,9 +593,9 @@ def main():
     if args.from_scratch:
         print("\n\nTraining Unet from scratch\n\n")
         new_unet_config = {'_class_name': 'UNet2DConditionModel', '_diffusers_version': '0.6.0',
-                           'act_fn': 'gelu',
+                           'act_fn': 'swish',
                            'attention_head_dim': 8,
-                           'block_out_channels': [320, 128, 64, 32],
+                           'block_out_channels': [320, 640, 1280, 1280],
                            'center_input_sample': False, 'cross_attention_dim': 768,
                            'down_block_types': ['DownBlock2D_64x64_mdCustom',
                                                 'DownBlock2D_32x32_mdCustom',
@@ -607,7 +607,7 @@ def main():
                                               'UpBlock_2D_16x16_mdCustom',
                                               'UpBlock_2D_32x32_mdCustom',
                                               'UpBlock_2D_64x64_mdCustom',
-                                              'UpBlock2D_mdCustom'], 
+                                             ], 
                            'transformer_layers_per_block': [0, 1, 2, 3],  # make transformer layers increase as resolution is smaller
                            'only_cross_attention': [True, True, False, False],
                            'layers_per_block': [1, 1, 1, 2],                           
