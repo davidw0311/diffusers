@@ -94,6 +94,288 @@ class GatedSelfAttentionDense(nn.Module):
 
 
 @maybe_allow_in_graph
+class DecoupledTransformerBlock(nn.Module):
+    r"""
+    A basic Transformer block.
+
+    Parameters:
+        dim (`int`): The number of channels in the input and output.
+        num_attention_heads (`int`): The number of heads to use for multi-head attention.
+        attention_head_dim (`int`): The number of channels in each head.
+        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
+        cross_attention_dim (`int`, *optional*): The size of the encoder_hidden_states vector for cross attention.
+        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
+        num_embeds_ada_norm (:
+            obj: `int`, *optional*): The number of diffusion steps used during training. See `Transformer2DModel`.
+        attention_bias (:
+            obj: `bool`, *optional*, defaults to `False`): Configure if the attentions should contain a bias parameter.
+        only_cross_attention (`bool`, *optional*):
+            Whether to use only cross-attention layers. In this case two cross attention layers are used.
+        double_self_attention (`bool`, *optional*):
+            Whether to use two self-attention layers. In this case no cross attention layers are used.
+        upcast_attention (`bool`, *optional*):
+            Whether to upcast the attention computation to float32. This is useful for mixed precision training.
+        norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
+            Whether to use learnable elementwise affine parameters for normalization.
+        norm_type (`str`, *optional*, defaults to `"layer_norm"`):
+            The normalization layer to use. Can be `"layer_norm"`, `"ada_norm"` or `"ada_norm_zero"`.
+        final_dropout (`bool` *optional*, defaults to False):
+            Whether to apply a final dropout after the last feed-forward layer.
+        attention_type (`str`, *optional*, defaults to `"default"`):
+            The type of attention to use. Can be `"default"` or `"gated"` or `"gated-text-image"`.
+        positional_embeddings (`str`, *optional*, defaults to `None`):
+            The type of positional embeddings to apply to.
+        num_positional_embeddings (`int`, *optional*, defaults to `None`):
+            The maximum number of positional embeddings to apply.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        num_attention_heads: int,
+        attention_head_dim: int,
+        dropout=0.0,
+        cross_attention_dim: Optional[int] = None,
+        activation_fn: str = "swish",
+        attention_bias: bool = False,
+        num_cross_attention: int = 3, # //note: new
+        num_self_attention: int =3, # //note: new
+        upcast_attention: bool = False,
+        norm_elementwise_affine: bool = True,
+        norm_type: str = "layer_norm",  # 'layer_norm', 'ada_norm', 'ada_norm_zero', 'ada_norm_single', 'layer_norm_i2vgen'
+        norm_eps: float = 1e-5,
+        final_dropout: bool = False,
+        positional_embeddings: Optional[str] = None,
+        num_positional_embeddings: Optional[int] = None,
+        ff_inner_dim: Optional[int] = None,
+        ff_bias: bool = True,
+        attention_out_bias: bool = True,
+    ):
+        
+        """
+        #//review: 原TransformerBlock的参数设计太复杂了，直接重写，
+        #//review: 根据SA、CA参数来控制有几个，不再根据CAdim、onlyCA判断
+        """
+        super().__init__()
+        # self.only_cross_attention = only_cross_attention
+
+        # We keep these boolean flags for backward-compatibility.
+        self.use_ada_layer_norm_zero = (num_embeds_ada_norm is not None) and norm_type == "ada_norm_zero"
+        self.use_ada_layer_norm = (num_embeds_ada_norm is not None) and norm_type == "ada_norm"
+        self.use_ada_layer_norm_single = norm_type == "ada_norm_single"
+        self.use_layer_norm = norm_type == "layer_norm"
+        self.use_ada_layer_norm_continuous = norm_type == "ada_norm_continuous"
+
+        if norm_type in ("ada_norm", "ada_norm_zero") and num_embeds_ada_norm is None:
+            raise ValueError(
+                f"`norm_type` is set to {norm_type}, but `num_embeds_ada_norm` is not defined. Please make sure to"
+                f" define `num_embeds_ada_norm` if setting `norm_type` to {norm_type}."
+            )
+
+        self.norm_type = norm_type
+        self.num_embeds_ada_norm = num_embeds_ada_norm
+
+        if positional_embeddings and (num_positional_embeddings is None):
+            raise ValueError(
+                "If `positional_embedding` type is defined, `num_positition_embeddings` must also be defined."
+            )
+
+        if positional_embeddings == "sinusoidal":
+            self.pos_embed = SinusoidalPositionalEmbedding(dim, max_seq_length=num_positional_embeddings)
+        else:
+            self.pos_embed = None
+
+        # Define 3 blocks. Each block has its own normalization layer.
+        
+
+        # 1. Self-Attn
+        if num_self_attention > 0:
+            self.self_norm_1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.self_attn_1 = Attention(
+                query_dim=dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                cross_attention_dim=None,
+                upcast_attention=upcast_attention,
+                out_bias=attention_out_bias,
+            )
+        else:
+            self.self_norm_1 = None
+            self.self_attn_1 = None
+        
+        if num_self_attention > 1:
+            self.self_norm_2 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.self_attn_2 = Attention(
+                query_dim=dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                cross_attention_dim=None,
+                upcast_attention=upcast_attention,
+                out_bias=attention_out_bias,
+            )
+        else:
+            self.self_norm_2 = None
+            self.self_attn_2 = None
+            
+        if num_self_attention == 3:
+            self.self_norm_3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.self_attn_3 = Attention(
+                query_dim=dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                cross_attention_dim=None,
+                upcast_attention=upcast_attention,
+                out_bias=attention_out_bias,
+            )
+        else:
+            self.self_norm_3 = None
+            self.self_attn_3 = None
+
+        if num_cross_attention > 0:
+            self.cross_norm_1 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
+            self.cross_attn_1 = Attention(
+                query_dim=dim,
+                cross_attention_dim=cross_attention_dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                upcast_attention=upcast_attention,
+                out_bias=attention_out_bias,
+            )  # is self-attn if encoder_hidden_states is none
+        else:
+            self.cross_norm_1 = None
+            self.cross_attn_1 = None
+        
+        if num_cross_attention > 1:
+            self.cross_norm_2 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
+            self.cross_attn_2 = Attention(
+                query_dim=dim,
+                cross_attention_dim=cross_attention_dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                upcast_attention=upcast_attention,
+                out_bias=attention_out_bias,
+            )  # is self-attn if encoder_hidden_states is none
+        else:
+            self.cross_norm_2 = None
+            self.cross_attn_2 = None
+            
+        if num_cross_attention == 3:
+            self.cross_norm_3 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
+            self.cross_attn_3 = Attention(
+                query_dim=dim,
+                cross_attention_dim=cross_attention_dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                upcast_attention=upcast_attention,
+                out_bias=attention_out_bias,
+            )  # is self-attn if encoder_hidden_states is none
+        else:
+            self.cross_norm_3 = None
+            self.cross_attn_3 = None
+         
+        # 3. Feed-forward
+        self.ff_norm = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
+        self.ff = FeedForward(
+            dim,
+            dropout=dropout,
+            activation_fn=activation_fn,
+            final_dropout=final_dropout,
+            inner_dim=ff_inner_dim,
+            bias=ff_bias,
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+    ) -> torch.FloatTensor:
+        # Notice that normalization is always applied before the real computation in the following blocks.
+        # 1. Self-Attention
+        if self.self_norm_1 is not None:
+            norm_hidden_states = self.self_norm_1(hidden_states)
+            if self.pos_embed is not None: # //review: pos_embed only applied once for all SA layers?
+                norm_hidden_states = self.pos_embed(norm_hidden_states)
+
+        if self.self_attn_1:
+            attn_output = self.self_attn_1(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
+                attention_mask=attention_mask,
+            )
+            hidden_states = attn_output + hidden_states
+
+        if self.self_attn_2 is not None:
+            norm_hidden_states = self.self_norm_2(hidden_states)
+            attn_output = self.self_attn_2(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+            )
+            hidden_states = attn_output + hidden_states
+            
+        if self.self_attn_3 is not None:
+            norm_hidden_states = self.self_norm_3(hidden_states)
+            attn_output = self.self_attn_3(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+            )
+            hidden_states = attn_output + hidden_states
+                
+        # 3. Cross-Attention
+        # if self.cross_attn_1 is not None
+        norm_hidden_states = self.cross_norm_1(hidden_states)
+        if self.pos_embed is not None:
+            norm_hidden_states = self.pos_embed(norm_hidden_states)
+        
+        attn_output = self.cross_attn_1(
+            norm_hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=encoder_attention_mask,
+        )
+        hidden_states = attn_output + hidden_states
+        
+        if self.cross_attn_2 is not None:
+            norm_hidden_states = self.cross_norm_2(hidden_states)
+            attn_output = self.cross_attn_2(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+            )
+            hidden_states = attn_output + hidden_states
+        
+        if self.cross_attn_3 is not None:
+            norm_hidden_states = self.cross_norm_3(hidden_states)
+            attn_output = self.cross_attn_3(
+                norm_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+            )
+            hidden_states = attn_output + hidden_states
+
+        # 4. Feed-forward
+        norm_hidden_states = self.ff_norm(hidden_states)
+        ff_output = self.ff(norm_hidden_states, scale=1.0)
+        hidden_states = ff_output + hidden_states
+
+        return hidden_states
+
+
+@maybe_allow_in_graph
 class BasicTransformerBlock(nn.Module):
     r"""
     A basic Transformer block.
