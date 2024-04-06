@@ -1345,10 +1345,10 @@ def main(args):
 
                     with autocast_ctx:
                         target_noise_pred = target_unet(
-                            x_prev,
+                            x_prev.float(),
                             timesteps,
                             timestep_cond=w_embedding,
-                            encoder_hidden_states=prompt_embeds,
+                            encoder_hidden_states=prompt_embeds.float(),
                         ).sample
                     pred_x_0 = get_predicted_original_sample(
                         target_noise_pred,
