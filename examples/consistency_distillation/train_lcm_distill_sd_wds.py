@@ -1344,8 +1344,8 @@ def main(args):
                         autocast_ctx = torch.autocast(accelerator.device.type, dtype=weight_dtype)
 
                     with autocast_ctx:
-                        print(target_unet.config)
-                        print(target_unet)
+                        print(original_unet.config['time_embedding'])
+                        print(target_unet.config['time_embedding'])
                         target_noise_pred = target_unet(
                             x_prev,
                             timesteps,
