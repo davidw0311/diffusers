@@ -929,10 +929,14 @@ def main(args):
     )
 
     # 5. Load teacher U-Net from SD 1.X/2.X checkpoint
+    original_unet = UNet2DConditionModel.from_pretrained(
+                args.pretrained_teacher_model, subfolder="unet", revision=args.teacher_revision
+    )
     teacher_unet = UNet2DConditionModel.from_pretrained(
         args.unet_path, subfolder='unet'
         # args.pretrained_teacher_model, subfolder="unet", revision=args.teacher_revision
     )    
+    teacher_unet.config = original_unet.config
 
     # 6. Freeze teacher vae, text_encoder, and teacher_unet
     vae.requires_grad_(False)
