@@ -51,8 +51,10 @@ When running `accelerate config`, if we specify torch compile mode to True there
 The following uses the [Conceptual Captions 12M (CC12M) dataset](https://github.com/google-research-datasets/conceptual-12m) as an example, and for illustrative purposes only. For best results you may consider large and high-quality text-image datasets such as [LAION](https://laion.ai/blog/laion-400-open-dataset/). You may also need to search the hyperparameter space according to the dataset you use.
 
 ```bash
-export MODEL_NAME="runwayml/stable-diffusion-v1-5"
-export OUTPUT_DIR="path/to/saved/model"
+export MODEL_NAME="lykon/absolutereality"
+export UNET_NAME="/home/users/nus/e0008091/scratch/MobileDiffusionDistillation/results/Lykon/AbsoluteReality/checkpoint-95000/"
+export OUTPUT_DIR="/scratch/lcm_model/"
+
 
 accelerate launch train_lcm_distill_sd_wds.py \
     --pretrained_teacher_model=$MODEL_NAME \
@@ -67,13 +69,13 @@ accelerate launch train_lcm_distill_sd_wds.py \
     --validation_steps=200 \
     --checkpointing_steps=200 --checkpoints_total_limit=10 \
     --train_batch_size=12 \
-    --gradient_checkpointing --enable_xformers_memory_efficient_attention \
+    --gradient_checkpointing \
     --gradient_accumulation_steps=1 \
     --use_8bit_adam \
     --resume_from_checkpoint=latest \
     --report_to=wandb \
-    --seed=453645634 \
-    --push_to_hub
+    --seed=453645634 
+
 ```
 
 ## LCM-LoRA

@@ -462,6 +462,13 @@ def parse_args():
         help="Path to pretrained LDM teacher model or model identifier from huggingface.co/models.",
     )
     parser.add_argument(
+        "--unet_path",
+        type=str,
+        default=None,
+        required=True,
+        help="Path to pretrained LDM teacher model or model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
         "--pretrained_vae_model_name_or_path",
         type=str,
         default=None,
@@ -923,8 +930,9 @@ def main(args):
 
     # 5. Load teacher U-Net from SD 1.X/2.X checkpoint
     teacher_unet = UNet2DConditionModel.from_pretrained(
-        args.pretrained_teacher_model, subfolder="unet", revision=args.teacher_revision
-    )
+        args.unet_path, subfolder='unet'
+        # args.pretrained_teacher_model, subfolder="unet", revision=args.teacher_revision
+    )    
 
     # 6. Freeze teacher vae, text_encoder, and teacher_unet
     vae.requires_grad_(False)
