@@ -1344,12 +1344,11 @@ def main(args):
                         autocast_ctx = torch.autocast(accelerator.device.type, dtype=weight_dtype)
 
                     with autocast_ctx:
-                        print(x_prev, timesteps, w_embedding, prompt_embeds)
                         target_noise_pred = target_unet(
-                            x_prev.float(),
+                            x_prev,
                             timesteps,
                             timestep_cond=w_embedding,
-                            encoder_hidden_states=prompt_embeds.float(),
+                            encoder_hidden_states=prompt_embeds,
                         ).sample
                     pred_x_0 = get_predicted_original_sample(
                         target_noise_pred,
