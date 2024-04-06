@@ -936,7 +936,9 @@ def main(args):
         args.unet_path, subfolder='unet'
         # args.pretrained_teacher_model, subfolder="unet", revision=args.teacher_revision
     )    
-    teacher_unet.config = original_unet.config
+    
+    config = teacher_unet.config
+    print(config)
 
     # 6. Freeze teacher vae, text_encoder, and teacher_unet
     vae.requires_grad_(False)
@@ -950,14 +952,14 @@ def main(args):
         if teacher_unet.config.time_cond_proj_dim is not None
         else args.unet_time_cond_proj_dim
     )
-    unet = UNet2DConditionModel.from_config(teacher_unet.config, time_cond_proj_dim=time_cond_proj_dim)
+    unet = UNet2DConditionModel.from_config(config, time_cond_proj_dim=time_cond_proj_dim)
     # load teacher_unet weights into unet
     unet.load_state_dict(teacher_unet.state_dict(), strict=False)
     unet.train()
 
     # 8. Create target student U-Net. This will be updated via EMA updates (polyak averaging).
     # Initialize from (online) unet
-    target_unet = UNet2DConditionModel(**teacher_unet.config)
+    target_unet = UNet2DConditionModel(**config)
     target_unet.load_state_dict(unet.state_dict(), strict=False)
     target_unet.train()
     target_unet.requires_grad_(False)
