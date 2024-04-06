@@ -221,8 +221,9 @@ class TimestepEmbedding(nn.Module):
             self.post_act = get_activation(post_act_fn)
 
     def forward(self, sample, condition=None):
-        if condition is not None:
-            sample = sample + self.cond_proj(condition)
+        if self.cond_proj is not None:
+            if condition is not None:
+                sample = sample + self.cond_proj(condition)
         sample = self.linear_1(sample)
 
         if self.act is not None:

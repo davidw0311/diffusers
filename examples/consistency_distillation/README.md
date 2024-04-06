@@ -53,7 +53,7 @@ The following uses the [Conceptual Captions 12M (CC12M) dataset](https://github.
 ```bash
 export MODEL_NAME="lykon/absolutereality"
 export UNET_NAME="/home/users/nus/e0008091/scratch/MobileDiffusionDistillation/results/Lykon/AbsoluteReality/checkpoint-95000/"
-export OUTPUT_DIR="/scratch/lcm_model/"
+export OUTPUT_DIR="/home/users/nus/e0008091/scratch/lcm_model/"
 
 
 accelerate launch train_lcm_distill_sd_wds.py \
