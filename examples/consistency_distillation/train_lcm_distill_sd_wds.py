@@ -948,9 +948,7 @@ def main(args):
     # 7. Create online student U-Net. This will be updated by the optimizer (e.g. via backpropagation.)
     # Add `time_cond_proj_dim` to the student U-Net if `teacher_unet.config.time_cond_proj_dim` is None
     time_cond_proj_dim = (
-        teacher_unet.config.time_cond_proj_dim
-        if teacher_unet.config.time_cond_proj_dim is not None
-        else args.unet_time_cond_proj_dim
+        args.unet_time_cond_proj_dim
     )
     unet = UNet2DConditionModel.from_config(config, time_cond_proj_dim=time_cond_proj_dim)
     # load teacher_unet weights into unet
@@ -1346,6 +1344,7 @@ def main(args):
                         autocast_ctx = torch.autocast(accelerator.device.type, dtype=weight_dtype)
 
                     with autocast_ctx:
+                        print(x_prev, timesteps, w_embedding, prompt_embeds)
                         target_noise_pred = target_unet(
                             x_prev.float(),
                             timesteps,
