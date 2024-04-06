@@ -58,6 +58,7 @@ export OUTPUT_DIR="/scratch/lcm_model/"
 
 accelerate launch train_lcm_distill_sd_wds.py \
     --pretrained_teacher_model=$MODEL_NAME \
+    --unet_path=$UNET_NAME \
     --output_dir=$OUTPUT_DIR \
     --mixed_precision=fp16 \
     --resolution=512 \

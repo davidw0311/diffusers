@@ -954,7 +954,7 @@ def main(args):
     # 8. Create target student U-Net. This will be updated via EMA updates (polyak averaging).
     # Initialize from (online) unet
     target_unet = UNet2DConditionModel(**teacher_unet.config)
-    target_unet.load_state_dict(unet.state_dict())
+    target_unet.load_state_dict(unet.state_dict(), strict=False)
     target_unet.train()
     target_unet.requires_grad_(False)
 
@@ -1012,7 +1012,7 @@ def main(args):
 
         def load_model_hook(models, input_dir):
             load_model = UNet2DConditionModel.from_pretrained(os.path.join(input_dir, "unet_target"))
-            target_unet.load_state_dict(load_model.state_dict())
+            target_unet.load_state_dict(load_model.state_dict(), strict=False)
             target_unet.to(accelerator.device)
             del load_model
 
@@ -1024,7 +1024,7 @@ def main(args):
                 load_model = UNet2DConditionModel.from_pretrained(input_dir, subfolder="unet")
                 model.register_to_config(**load_model.config)
 
-                model.load_state_dict(load_model.state_dict())
+                model.load_state_dict(load_model.state_dict(), strict=False)
                 del load_model
 
         accelerator.register_save_state_pre_hook(save_model_hook)
